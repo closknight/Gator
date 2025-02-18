@@ -3,9 +3,12 @@ package main
 import (
 	"Gator/internal/database"
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func handlerAgg(s *state, cmd command) error {
@@ -49,6 +52,28 @@ func scrapeFeed(db *database.Queries, feed database.Feed) {
 	}
 	for _, item := range feedData.Channel.Item {
 		fmt.Printf(" * %s\n", item.Title)
+		published_at := sql.NullTime{}
+		pubDate, err := time.Parse(time.RFC822, item.PubDate)
+		if err == nil {
+			published_at = sql.NullTime{Valid: true, Time: pubDate}
+		}
+
+		params := database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: sql.NullString{String: item.Description, Valid: true},
+			PublishedAt: published_at,
+			FeedID:      feed.ID,
+		}
+
+		_, err = db.CreatePost(context.Background(), params)
+		if err != nil {
+			log.Printf("error logging in post %s: %v", item.Title, err)
+		}
+
 	}
 	log.Printf("Feed %s collected, %v posts found", feed.Name, len(feedData.Channel.Item))
 }
